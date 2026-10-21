@@ -1,0 +1,17 @@
+{
+  "name": "opentally",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A community exit poll for the web: people who install it share which option they picked, and the aggregate counts are published openly.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && vitest run"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
