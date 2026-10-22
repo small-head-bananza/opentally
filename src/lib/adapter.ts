@@ -5,12 +5,25 @@
 // against the live site: tests must run with no network, and a site changing its markup
 // should break a fixture test here, not behaviour in the field.
 
+/** A vote the participant just submitted, as the adapter read it off the page. */
+export interface PageSubmission {
+  /** Which poll on the site — a stable id derived from page structure, never free text. */
+  readonly poll: string;
+  /** The option submitted — likewise a stable id from the page, not display text. */
+  readonly option: string;
+}
+
 /** What a site adapter must provide. */
 export interface SiteAdapter {
-  /** Short fixed id, e.g. "example-awards". Lowercase letters, digits and dashes only. */
+  /** Short fixed id, e.g. "example-site". Lowercase letters, digits and dashes only. */
   readonly siteId: string;
   /** Does this adapter handle the given page? Must be decidable from the URL alone. */
   matches(url: URL): boolean;
+  /**
+   * Start watching the page and call report() each time the participant actually
+   * submits a vote — never for mere clicking-around while deciding.
+   */
+  attach(root: ParentNode, report: (submission: PageSubmission) => void): void;
 }
 
 const SITE_ID = /^[a-z0-9][a-z0-9-]*$/;

@@ -6,15 +6,15 @@ const submit = (
   store: MemoryStore,
   client: TallyClient,
   option: string,
-  poll = "best-stream",
-) => recordSubmission(store, client, { site: "example-awards", poll, option });
+  poll = "first-poll",
+) => recordSubmission(store, client, { site: "example-site", poll, option });
 
 describe("recording a submission", () => {
   it("sends one plain update the first time", async () => {
     const store = new MemoryStore();
     const client = new RecordingClient();
     const update = await submit(store, client, "alice");
-    expect(update).toEqual({ site: "example-awards", poll: "best-stream", to: "alice" });
+    expect(update).toEqual({ site: "example-site", poll: "first-poll", to: "alice" });
     expect(client.sent).toEqual([update]);
   });
 
@@ -33,8 +33,8 @@ describe("recording a submission", () => {
     await submit(store, client, "alice");
     const change = await submit(store, client, "bob");
     expect(change).toEqual({
-      site: "example-awards",
-      poll: "best-stream",
+      site: "example-site",
+      poll: "first-poll",
       to: "bob",
       from: "alice",
     });
@@ -44,21 +44,37 @@ describe("recording a submission", () => {
   it("keeps polls independent — same site, different poll, no from", async () => {
     const store = new MemoryStore();
     const client = new RecordingClient();
-    await submit(store, client, "alice", "best-stream");
-    const other = await submit(store, client, "carol", "best-moment");
-    expect(other).toEqual({ site: "example-awards", poll: "best-moment", to: "carol" });
+    await submit(store, client, "alice", "first-poll");
+    const other = await submit(store, client, "carol", "second-poll");
+    expect(other).toEqual({ site: "example-site", poll: "second-poll", to: "carol" });
   });
 
-  it("does not record the submission when the send fails, so it can be retried", async () => {
+  it("loses the count on a failed send rather than ever double-counting", async () => {
+    // The record is written BEFORE the send. The server cannot tell a retry from
+    // a second vote (no identifier in the payload), so a replay could inflate the
+    // tally forever; a lost count merely undercounts. Rule 3 in selection.ts.
     const store = new MemoryStore();
     const failing = {
       send: () => Promise.reject(new Error("network down")),
     };
     await expect(submit(store, failing, "alice")).rejects.toThrow("network down");
-    // The store was never written, so the next attempt is still a first submission.
+
+    // The record exists, so resubmitting the same option sends NOTHING — the
+    // transition is lost, not replayed.
     const client = new RecordingClient();
-    const retry = await submit(store, client, "alice");
-    expect(retry).toEqual({ site: "example-awards", poll: "best-stream", to: "alice" });
+    const resubmit = await submit(store, client, "alice");
+    expect(resubmit).toBeNull();
+    expect(client.sent).toHaveLength(0);
+
+    // A later change of mind still sends a correct correction; the server floors
+    // the never-counted "from" at zero, so the books heal.
+    const change = await submit(store, client, "bob");
+    expect(change).toEqual({
+      site: "example-site",
+      poll: "first-poll",
+      to: "bob",
+      from: "alice",
+    });
   });
 
   it("refuses empty fields instead of tallying garbage", async () => {

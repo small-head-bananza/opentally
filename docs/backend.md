@@ -28,7 +28,13 @@ extension ──POST {site,poll,to,from}──▶ Cloudflare Worker ──▶ D1
   `from`'s when present.
 - **Storing:** Cloudflare D1, a small SQLite database, also free at this size.
   One row per (site, poll, option) holding a single integer. No per-person rows
-  exist anywhere, so there is nothing to leak.
+  exist anywhere, so there is nothing to leak. Two hard rules on every write
+  (they are part of the CounterStore contract in src/worker/tally.ts, and the
+  in-memory test store honors them too):
+  - A correction's two changes (+1 to the new option, -1 to the old) land as one
+    D1 batch — both or neither. Applying only half would mint a phantom count.
+  - A counter never goes below zero and a subtraction never creates a row, so a
+    request naming an option nobody holds cannot drive its public count negative.
 - **Publishing:** a scheduled job exports the totals as a JSON file and commits it
   to the public repository; GitHub Pages serves the tally page from it. The page
   shows each poll's totals with its participant count and the limits statement.
@@ -48,10 +54,22 @@ what it is. Still, cheap tricks should stay cheap to stop:
 - The export job writes totals only; a bad day can be rolled back from git
   history of the published JSON.
 
-What this does **not** stop: one person with several devices, or a determined
-scripter rotating addresses. The published page says so. Stronger defences
-(proof-of-work, install tokens) only make sense if the project grows, and each
-one trades away some simplicity — a decision for later, taken in the open.
+What this does **not** stop, and the published page says so:
+
+- One person with several devices, or a determined scripter rotating addresses,
+  can still inflate counts within the rate limits.
+- A scripted client can send well-formed "I changed my vote away from X"
+  messages it never earned. The zero floor stops X going negative, but within
+  rate limits an attacker can still shift counts around. Updates carry no
+  identity (by design), so the server cannot tell an honest correction from a
+  fabricated one.
+- Honest drift: a participant whose send failed is simply not counted (we drop
+  rather than retry, because a retry the server cannot recognize as a retry
+  could count someone twice), and a reinstall can count someone again.
+
+Stronger defences (proof-of-work, install tokens) only make sense if the project
+grows, and each one trades away some simplicity or some anonymity — a decision
+for later, taken in the open.
 
 ## Alternatives considered
 
